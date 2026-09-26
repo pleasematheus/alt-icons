@@ -8,21 +8,22 @@ persists after a restart. This is different from changing an app's launcher entr
 
 ## Install
 
-Add both crates to your `Cargo.toml`:
+Add `alt-icons` as both a runtime dependency and a build dependency. The `build`
+feature enables the helper used from `build.rs`:
 
 ```toml
 [dependencies]
 alt-icons = "1"
 
 [build-dependencies]
-alt-icons-build = "1"
+alt-icons = { version = "1.1", features = ["build"] }
 ```
 
 Declare the icon set in `build.rs`:
 
 ```rust
 fn main() {
-    alt_icons_build::configure(&[
+    alt_icons::build::configure(&[
         ("Default", "assets/default.ico"),
         ("Dark", "assets/dark.ico"),
     ]);

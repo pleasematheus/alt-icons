@@ -17,10 +17,12 @@ Não é paridade com iOS/Android — lá o ícone trocado é o do lançador. O q
 empresta do iOS é o *modelo*: conjunto fechado declarado no build, troca por nome.
 O README precisa abrir dizendo isso.
 
-## Dois crates
+## Um crate, dois contextos de compilação
 
-- **`alt-icons`** — runtime. Dependência: `windows-sys`.
-- **`alt-icons-build`** — build-dependency. Dependência: `embed-resource`.
+- **Runtime** — `alt-icons` fornece a API que altera o executável. Dependência:
+  `windows-sys` no Windows.
+- **Build script** — o mesmo pacote, com a feature `build`, fornece
+  `alt_icons::build::configure`. Dependência opcional: `embed-resource`.
 
 O build script é a única declaração de ícones. Ele assa o `Default` no binário e
 gera o enum em `OUT_DIR`. Não há proc macro: o build script roda antes da expansão
@@ -32,7 +34,7 @@ de verdade tem que morar nele.
 ```rust
 // build.rs
 fn main() {
-    alt_icons_build::configure(&[
+    alt_icons::build::configure(&[
         ("Default", "assets/default.ico"),
         ("Dark",    "assets/dark.ico"),
     ]);

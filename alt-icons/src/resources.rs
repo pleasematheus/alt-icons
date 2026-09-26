@@ -20,7 +20,7 @@ pub const RT_ICON: u16 = 3;
 pub const RT_RCDATA: u16 = 10;
 pub const RT_GROUP_ICON: u16 = 14;
 
-/// The single icon group the crate owns. `alt-icons-build` bakes the default icon
+/// The single icon group the crate owns. `alt-icons::build` bakes the default icon
 /// under this same id, so there is never more than one group and never any question
 /// about which one the shell picks.
 pub const GROUP_ID: u16 = 1;

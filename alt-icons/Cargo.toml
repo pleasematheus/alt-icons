@@ -10,6 +10,12 @@ documentation = "https://docs.rs/alt-icons"
 keywords = ["windows", "icon", "executable", "win32"]
 categories = ["os::windows-apis"]
 
+[features]
+build = ["dep:embed-resource"]
+
+[dependencies]
+embed-resource = { version = "3", optional = true }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.60", features = [
     "Win32_Foundation",

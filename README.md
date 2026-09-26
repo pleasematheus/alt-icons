@@ -2,14 +2,15 @@
 
 A Windows executable that changes its own icon, permanently.
 
-Add both crates to your application's `Cargo.toml`:
+Add the same crate to your application's runtime and build dependencies. The `build`
+feature enables its helper API inside `build.rs`:
 
 ```toml
 [dependencies]
 alt-icons = "1"
 
 [build-dependencies]
-alt-icons-build = "1"
+alt-icons = { version = "1.1", features = ["build"] }
 ```
 
 ```rust
@@ -25,7 +26,7 @@ fn main() -> Result<(), alt_icons::Error> {
 ```rust
 // build.rs
 fn main() {
-    alt_icons_build::configure(&[
+    alt_icons::build::configure(&[
         ("Default", "assets/default.ico"),
         ("Dark", "assets/dark.ico"),
     ]);
@@ -51,7 +52,7 @@ file it parked.
 
 **The binary rewrites itself, so its hash changes on every swap.** Heuristic antivirus
 and SmartScreen reputation both notice that. The default icon is baked at build time
-by `alt-icons-build` precisely so this only happens when your user asks for a different
+by `alt-icons`'s build feature precisely so this only happens when your user asks for a different
 icon — never on the first launch of a freshly downloaded binary.
 
 **It is incompatible with code signing.** Rewriting the PE invalidates an Authenticode
@@ -95,7 +96,6 @@ script; it generates the `AppIcon` enum that `include_icons!()` pulls in.
 | Path | What it is |
 |---|---|
 | `alt-icons/` | The runtime crate. |
-| `alt-icons-build/` | The build-script helper. |
 | `fixtures/demo/` | A tiny binary that swaps its own icon, and the integration tests. |
 
 ## License

@@ -16,10 +16,11 @@
 //! }
 //! ```
 //!
-//! Declaring the set lives in `build.rs`, via `alt-icons-build`. That is not an
-//! accident of style: a build script runs before macro expansion, so it cannot read
-//! a list declared by a macro, and the default icon has to be baked at build time or
-//! the binary you ship has no icon at all.
+//! Declare the icon set in `build.rs` with `alt_icons::build::configure`. The `build` feature
+//! enables this helper when `alt-icons` is used as a build-dependency. A build script
+//! runs before macro expansion, so it cannot read a list declared by a macro, and
+//! the default icon has to be baked at build time or the binary you ship has no icon
+//! at all.
 //!
 //! # What this costs
 //!
@@ -33,6 +34,9 @@
 use std::fmt;
 use std::path::PathBuf;
 
+#[cfg(feature = "build")]
+pub mod build;
+
 #[cfg(windows)]
 mod ico;
 #[cfg(windows)]
@@ -45,7 +49,7 @@ mod win;
 #[cfg(windows)]
 pub use swap::{current_icon, init, set_icon};
 
-/// One icon in the set. Implemented by the `AppIcon` enum that `alt-icons-build`
+/// One icon in the set. Implemented by the `AppIcon` enum that `build::configure`
 /// generates; there is no reason to implement it by hand.
 pub trait Icon {
     /// The variant's name, stored in the binary so [`current_icon`] can report it.

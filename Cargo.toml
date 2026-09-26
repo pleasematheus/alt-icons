@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["alt-icons", "alt-icons-build", "fixtures/demo"]
+members = ["alt-icons", "fixtures/demo"]
 
 [workspace.package]
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pleasematheus/alt-icons"

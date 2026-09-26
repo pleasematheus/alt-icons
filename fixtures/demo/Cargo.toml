@@ -10,7 +10,7 @@ publish = false
 alt-icons = { path = "../../alt-icons" }
 
 [build-dependencies]
-alt-icons-build = { path = "../../alt-icons-build" }
+alt-icons = { path = "../../alt-icons", features = ["build"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.60", features = [
