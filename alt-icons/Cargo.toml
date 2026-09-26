@@ -1,0 +1,21 @@
+[package]
+name = "alt-icons"
+description = "A Windows executable that permanently changes its own icon, iOS-style: a closed set declared at build time, switched by name."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/alt-icons"
+keywords = ["windows", "icon", "executable", "win32"]
+categories = ["os::windows-apis"]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+] }

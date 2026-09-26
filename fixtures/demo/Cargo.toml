@@ -1,0 +1,20 @@
+[package]
+name = "demo"
+description = "Fixture binary used by the alt-icons integration tests."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+alt-icons = { path = "../../alt-icons" }
+
+[build-dependencies]
+alt-icons-build = { path = "../../alt-icons-build" }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.60", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
