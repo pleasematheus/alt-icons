@@ -100,4 +100,4 @@ script; it generates the `AppIcon` enum that `include_icons!()` pulls in.
 
 ## License
 
-MIT or Apache-2.0, at your option.
+Apache-2.0
