@@ -7,10 +7,10 @@ feature enables its helper API inside `build.rs`:
 
 ```toml
 [dependencies]
-alt-icons = "1"
+alt-icons = "1.2"
 
 [build-dependencies]
-alt-icons = { version = "1.1", features = ["build"] }
+alt-icons = { version = "1.2", features = ["build"] }
 ```
 
 ```rust
@@ -45,8 +45,34 @@ new icon is the one Explorer shows for the `.exe`, and it survives a reboot.
 
 Under the hood, a swap: takes a named mutex, parses and validates the whole `.ico` in
 memory, writes a patched copy of the executable next to it, renames the running image
-aside, moves the patched copy into place, and tells the shell. A later run deletes the
-file it parked.
+aside, moves the patched copy into place, and tells the shell. By default, a hidden
+Windows PowerShell helper waits for the application to exit and deletes the parked
+`.old` file. No restart of the application is required. If another instance still
+uses the old image, cleanup waits for other instances at the executable's path too.
+
+## Cleanup options
+
+`init()` enables automatic cleanup. To preserve the renamed executables, use this
+instead, once near the start of the application, before changing icons:
+
+```rust
+alt_icons::init_with_options(alt_icons::Options {
+    cleanup_old: false,
+})?;
+```
+
+The option applies process-wide to both startup cleanup and subsequent swaps. Use
+the same option on each launch to keep preserving `.old` files. Calling `init()`
+again restores the default and cleans up preserved files that are no longer in use.
+Abandoned `.new` staging files are cleaned up regardless of the option.
+
+The helper uses the system Windows PowerShell, without a window, profiles, inherited
+console streams, or additional files. It exits when cleanup finishes; temporary
+file locks are retried for up to 15 seconds after the app instances exit. If system
+policy blocks PowerShell, or a file cannot be removed, a later `init()` retries the
+cleanup. A successful icon change is not reported as a failure just because cleanup
+could not be scheduled. Disabling cleanup does not cancel helpers already started
+by a previous swap or by another instance.
 
 ## What it costs
 

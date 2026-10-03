@@ -6,12 +6,18 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use base64::Engine;
+
 use windows_sys::Win32::Foundation::{
-    CloseHandle, SetLastError, ERROR_ALREADY_EXISTS, HANDLE, MAX_PATH,
+    CloseHandle, SetLastError, ERROR_ALREADY_EXISTS, FILETIME, HANDLE, MAX_PATH,
 };
 use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING};
 use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
-use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex};
+use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+use windows_sys::Win32::System::Threading::{
+    CreateMutexW, CreateProcessW, GetCurrentProcess, GetCurrentProcessId, GetProcessTimes,
+    ReleaseMutex, CREATE_NO_WINDOW, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOW,
+};
 use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
 use crate::Error;
@@ -146,6 +152,93 @@ impl Drop for SwapLock {
 
 pub fn last_error() -> u32 {
     unsafe { windows_sys::Win32::Foundation::GetLastError() }
+}
+
+/// A detached system helper outlives the image being swapped. All paths are passed
+/// as PowerShell literal strings, never interpolated as executable commands.
+pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Result<(), Error> {
+    let mut system_dir = vec![0u16; MAX_PATH as usize];
+    let written = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
+    if written == 0 || written as usize >= system_dir.len() {
+        return Err(Error::Windows("GetSystemDirectoryW", last_error()));
+    }
+    system_dir.truncate(written as usize);
+    let powershell = PathBuf::from(OsString::from_wide(&system_dir))
+        .join("WindowsPowerShell/v1.0/powershell.exe");
+
+    let (owner, started) = if wait_for_current {
+        let mut creation = FILETIME::default();
+        let mut exit = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        if unsafe {
+            GetProcessTimes(
+                GetCurrentProcess(),
+                &mut creation,
+                &mut exit,
+                &mut kernel,
+                &mut user,
+            )
+        } == 0
+        {
+            return Err(Error::Windows("GetProcessTimes", last_error()));
+        }
+        (
+            unsafe { GetCurrentProcessId() },
+            (u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime),
+        )
+    } else {
+        (0, 0)
+    };
+    let path = path.as_os_str().to_string_lossy().replace('\'', "''");
+    let exe = exe.as_os_str().to_string_lossy().replace('\'', "''");
+    let script = format!(
+        "$ownerId = {owner}; $ownerStarted = {started}; $oldPath = '{path}'; $launchPath = '{exe}';\n{}",
+        include_str!("cleanup.ps1")
+    );
+    // EncodedCommand takes base64 of UTF-16LE, avoiding command-line quoting for
+    // script contents. The application path is supplied separately to Windows.
+    let encoded = base64::engine::general_purpose::STANDARD.encode(
+        script
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>(),
+    );
+    let application = Wide::new(&powershell);
+    let mut command = Wide::new(format!(
+        "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}"
+    ));
+    let startup = STARTUPINFOW {
+        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+        dwFlags: STARTF_USESTDHANDLES,
+        ..Default::default()
+    };
+    let mut process = PROCESS_INFORMATION::default();
+    // Inherit NO handles, including incidental handles unrelated to standard IO.
+    // Otherwise the helper could keep another child process's stdin pipe open or
+    // retain application locks until it exits. All three std handles are null.
+    if unsafe {
+        CreateProcessW(
+            application.as_ptr(),
+            command.0.as_mut_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            0,
+            CREATE_NO_WINDOW,
+            std::ptr::null(),
+            std::ptr::null(),
+            &startup,
+            &mut process,
+        )
+    } == 0
+    {
+        return Err(Error::Windows("CreateProcessW", last_error()));
+    }
+    unsafe {
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+    Ok(())
 }
 
 /// Case-insensitive FNV-1a over the path, so the lock name is stable for a given

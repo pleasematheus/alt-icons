@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
     Mutex, OnceLock,
 };
 
@@ -18,16 +18,29 @@ use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 use crate::ico;
 use crate::resources::{self, Update, FIRST_ICON_ID};
 use crate::win::{self, SwapLock};
-use crate::{Error, Icon};
+use crate::{Error, Icon, Options};
 
-/// Cleans up after previous swaps, and repairs one that was interrupted.
+static CLEANUP_OLD: AtomicBool = AtomicBool::new(true);
+
+/// Enables automatic cleanup and removes leftovers from previous swaps.
 ///
-/// Call this once, early in `main`. Every swap leaves behind the renamed previous
-/// executable, which stays locked until the process that was running from it exits —
-/// so it can only be deleted on a later run. This is that later run.
+/// Call this once, early in `main`. New swaps start a hidden Windows PowerShell
+/// helper that deletes the renamed executable after the processes using it exit.
+/// Startup cleanup is a fallback if the helper could not run or finish.
 pub fn init() -> Result<(), Error> {
+    init_with_options(Options::default())
+}
+
+/// Configures cleanup and removes abandoned staging files from previous swaps.
+///
+/// With `cleanup_old: false`, neither startup nor subsequent swaps delete `.old`
+/// files. Use the same option on each launch to keep preserving them. Configure
+/// this once before starting threads that change icons; it applies process-wide.
+pub fn init_with_options(options: Options) -> Result<(), Error> {
     let exe = win::current_exe()?;
     let (dir, stem) = location(&exe)?;
+    let _lock = SwapLock::acquire(&exe)?;
+    CLEANUP_OLD.store(options.cleanup_old, Ordering::Relaxed);
 
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -42,9 +55,14 @@ pub fn init() -> Result<(), Error> {
         if !is_leftover(name, &stem) {
             continue;
         }
-        // The leftover backing the *current* process is still locked and will fail
-        // here. That is expected: the next run deletes it.
-        let _ = std::fs::remove_file(entry.path());
+        if name.ends_with(".old") {
+            if options.cleanup_old && std::fs::remove_file(entry.path()).is_err() {
+                // Another instance may still be using it. Do not wait in startup.
+                let _ = win::schedule_cleanup(&entry.path(), &exe, false);
+            }
+        } else {
+            let _ = std::fs::remove_file(entry.path());
+        }
     }
     Ok(())
 }
@@ -175,6 +193,11 @@ fn install(staging: &Path, exe: &Path, dir: &Path, stem: &str) -> Result<(), Err
         let _ = win::rename_new(&parked, exe);
         let _ = std::fs::remove_file(staging);
         return Err(err);
+    }
+    if CLEANUP_OLD.load(Ordering::Relaxed) {
+        // The swap is already committed. Cleanup failure must not report a failed
+        // icon change; init() on a later run remains the fallback.
+        let _ = win::schedule_cleanup(&parked, exe, true);
     }
     Ok(())
 }
