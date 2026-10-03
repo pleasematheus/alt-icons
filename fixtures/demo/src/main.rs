@@ -5,6 +5,8 @@
 //! demo Dark                   switches to the Dark icon
 //! demo Default                switches back
 //! demo cycle Dark Default     switches several times within one process
+//! demo --keep-old Dark        switches while preserving renamed executables
+//! demo hold Dark              switches and waits for a line on stdin
 //! ```
 //!
 //! `cycle` exists for the tests. The first swap of a run has to rename the running
@@ -12,6 +14,7 @@
 //! and takes a different code path. Separate invocations can only ever exercise the
 //! first branch.
 
+use std::io::{self, Write};
 use std::process::ExitCode;
 
 alt_icons::include_icons!();
@@ -25,11 +28,13 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), alt_icons::Error> {
-    // Clears the renamed executable left by a previous run, and repairs a swap that
-    // was interrupted. Cheap, and the only place it can happen.
-    alt_icons::init()?;
-
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("--keep-old") {
+        args.remove(0);
+        alt_icons::init_with_options(alt_icons::Options { cleanup_old: false })?;
+    } else {
+        alt_icons::init()?;
+    }
     match args.split_first() {
         None => {
             let current = alt_icons::current_icon()?;
@@ -41,6 +46,17 @@ fn run() -> Result<(), alt_icons::Error> {
             }
             let current = alt_icons::current_icon()?;
             println!("{}", current.as_deref().unwrap_or("Default"));
+        }
+        Some((first, rest)) if first == "hold" => {
+            if let Some(wanted) = rest.first() {
+                alt_icons::set_icon(lookup(wanted))?;
+            }
+            let current = alt_icons::current_icon()?;
+            println!("{}", current.as_deref().unwrap_or("Default"));
+            io::stdout().flush()?;
+            // Tests release this process by closing stdin, or kill it to simulate
+            // an abrupt exit. Neither requires a fixed delay in the application.
+            io::stdin().read_line(&mut String::new())?;
         }
         Some((wanted, _)) => {
             alt_icons::set_icon(lookup(wanted))?;

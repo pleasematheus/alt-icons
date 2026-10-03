@@ -46,7 +46,7 @@ fn main() {
 alt_icons::include_icons!();   // include! do arquivo gerado em OUT_DIR
 
 fn main() -> anyhow::Result<()> {
-    alt_icons::init()?;                       // limpeza do .old + recuperação
+    alt_icons::init()?;                       // limpeza automática habilitada
     alt_icons::set_icon(AppIcon::Dark)?;
     Ok(())
 }
@@ -62,7 +62,24 @@ fn main() -> anyhow::Result<()> {
 4. Se o path original ainda estiver ocupado pelo processo, renomeia para `.old`.
 5. Renomeia o temporário para o path original.
 6. `SHChangeNotify(SHCNE_ASSOCCHANGED)`.
-7. No próximo start, `init()` apaga o `.old` e conserta troca interrompida.
+7. Um auxiliar oculto do Windows PowerShell aguarda o encerramento do aplicativo
+   e exclui o `.old`, sem exigir outra execução. Se outra instância ainda usar a
+   imagem antiga, aguarda as demais instâncias no mesmo caminho do executável.
+8. No próximo start, `init()` tenta novamente a limpeza que tenha falhado.
+
+`init_with_options(Options { cleanup_old: false })` preserva os `.old` tanto na
+inicialização quanto nas trocas seguintes. A configuração vale para o processo e
+deve ser aplicada uma vez antes das trocas, em cada execução. Temporários `.new`
+abandonados continuam sendo removidos, sob o mesmo mutex usado pela troca.
+
+O auxiliar usa o Windows PowerShell do diretório de sistema, sem perfil, janela,
+arquivos extras ou streams herdados do aplicativo. Identifica o processo por PID
+e horário de criação para não aguardar um PID reutilizado. Após a saída, tenta
+excluir apenas o caminho literal do `.old` recebido; bloqueios temporários têm
+até 15 segundos de novas tentativas. Se não puder executar ou excluir o arquivo,
+`init()` na próxima execução é o fallback. Uma falha de limpeza não transforma
+uma troca já concluída em erro. Desabilitar a opção não cancela auxiliares já
+iniciados por uma troca anterior ou por outra instância.
 
 Os ícones alternativos entram no binário via `include_bytes!`, emitido pelo build
 script. O exe carrega um único `RT_GROUP_ICON` de id 1 — o mesmo que o

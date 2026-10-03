@@ -13,10 +13,10 @@ feature enables the helper used from `build.rs`:
 
 ```toml
 [dependencies]
-alt-icons = "1"
+alt-icons = "1.2"
 
 [build-dependencies]
-alt-icons = { version = "1.1", features = ["build"] }
+alt-icons = { version = "1.2", features = ["build"] }
 ```
 
 Declare the icon set in `build.rs`:
@@ -45,6 +45,33 @@ fn main() -> Result<(), alt_icons::Error> {
 `Default` is required and is embedded in the executable during the build. Icon
 paths in `build.rs` are relative to the application's crate root.
 
+## Cleanup options
+
+By default, the first swap parks the running executable in a uniquely named `.old`
+file. A hidden system Windows PowerShell helper deletes it after the application
+exits, without needing another launch. If other instances still use the old image,
+the helper waits for other instances launched from the same executable path too.
+
+To preserve `.old` files, replace `init()` with:
+
+```rust
+alt_icons::init_with_options(alt_icons::Options {
+    cleanup_old: false,
+})?;
+```
+
+Configure this once at startup, before changing icons. The option applies
+process-wide to startup cleanup and later swaps. Use it on each launch to keep
+preserving files; the default `init()` enables cleanup again. Abandoned `.new`
+staging files are always cleaned up. Disabling cleanup does not cancel helpers
+already started by an earlier swap or by another instance.
+
+Automatic cleanup uses Windows PowerShell with no window, profiles, inherited
+console streams, or additional files. Temporary locks are retried for up to 15
+seconds after the application instances exit. If PowerShell is unavailable or
+blocked by system policy, or deletion fails, the next `init()` retries cleanup.
+Cleanup failure does not turn a completed icon change into an error.
+
 ## Requirements and behavior
 
 - The runtime icon change works on Windows. The crate still builds on other
@@ -59,5 +86,4 @@ paths in `build.rs` are relative to the application's crate root.
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or the MIT license, at your
-option.
+Apache-2.0

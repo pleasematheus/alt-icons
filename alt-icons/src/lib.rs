@@ -47,7 +47,24 @@ mod swap;
 mod win;
 
 #[cfg(windows)]
+pub use swap::init_with_options;
+#[cfg(windows)]
 pub use swap::{current_icon, init, set_icon};
+
+/// Runtime behavior, configured once near the start of the application.
+#[derive(Clone, Copy, Debug)]
+pub struct Options {
+    /// Remove renamed executables automatically after their users exit, and clean
+    /// up leftovers on startup. Set to `false` to preserve `.old` files instead.
+    /// Abandoned `.new` staging files are cleaned up regardless of this option.
+    pub cleanup_old: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self { cleanup_old: true }
+    }
+}
 
 /// One icon in the set. Implemented by the `AppIcon` enum that `build::configure`
 /// generates; there is no reason to implement it by hand.
@@ -126,10 +143,15 @@ impl From<std::io::Error> for Error {
 
 #[cfg(not(windows))]
 mod stubs {
-    use super::{Error, Icon};
+    use super::{Error, Icon, Options};
 
     /// No-op away from Windows, so a cross-platform crate still builds.
     pub fn init() -> Result<(), Error> {
+        Ok(())
+    }
+
+    /// No-op away from Windows, just like [`init`].
+    pub fn init_with_options(_options: Options) -> Result<(), Error> {
         Ok(())
     }
 
@@ -143,4 +165,4 @@ mod stubs {
 }
 
 #[cfg(not(windows))]
-pub use stubs::{current_icon, init, set_icon};
+pub use stubs::{current_icon, init, init_with_options, set_icon};
