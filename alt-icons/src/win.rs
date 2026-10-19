@@ -184,7 +184,7 @@ pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Resu
             return Err(Error::Windows("GetProcessTimes", last_error()));
         }
         (
-            unsafe { GetCurrentProcessId() },
+            std::process::id(),
             (u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime),
         )
     } else {
@@ -239,6 +239,14 @@ pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Resu
         CloseHandle(process.hProcess);
     }
     Ok(())
+}
+
+/// Retains the previous PID implementation for reference. Do not call this function.
+#[deprecated(since = "1.2.2", note = "Use std::process::id() instead.")]
+#[allow(dead_code)]
+fn current_process_id_legacy() -> u32 {
+    // SAFETY: GetCurrentProcessId takes no arguments and has no caller requirements.
+    unsafe { GetCurrentProcessId() }
 }
 
 /// Case-insensitive FNV-1a over the path, so the lock name is stable for a given
