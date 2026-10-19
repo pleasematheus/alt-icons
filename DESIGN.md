@@ -83,7 +83,15 @@ iniciados por uma troca anterior ou por outra instância.
 
 Os ícones alternativos entram no binário via `include_bytes!`, emitido pelo build
 script. O exe carrega um único `RT_GROUP_ICON` de id 1 — o mesmo que o
-`embed-resource` produz — reescrito por `UpdateResource` a cada troca.
+`embed-resource` produz. A transação de escrita usa `editpe` para alterar esse grupo
+em memória. A confirmação grava somente o arquivo temporário. O descarte da
+transação não grava alterações. Os outros recursos e idiomas devem ser preservados.
+
+O editor pode criar uma seção de recursos adicional na primeira troca. Esse custo
+inicial de tamanho é aceito. As trocas repetidas entre os mesmos ícones não devem
+acumular seções nem aumentar o arquivo a cada ciclo. Os testes verificam um limite
+de crescimento para os ícones de demonstração e a estabilidade nos ciclos seguintes.
+Essa medição não define um limite universal para todos os executáveis PE.
 
 Path não gravável → `IconError::PathNotWritable`. Sem fallback, sem UAC, sem se
 copiar para outro lugar.

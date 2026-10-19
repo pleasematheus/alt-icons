@@ -154,7 +154,7 @@ fn write_resources(
     stale: &[u16],
     name: &str,
 ) -> Result<(), Error> {
-    let update = Update::begin(staging)?;
+    let mut update = Update::begin(staging)?;
     for (index, image) in images.iter().enumerate() {
         update.set_icon_image(FIRST_ICON_ID + index as u16, image.data)?;
     }

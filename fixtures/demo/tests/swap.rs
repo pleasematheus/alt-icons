@@ -42,11 +42,23 @@ fn swaps_icons_and_reports_the_active_one() {
     assert_eq!(run(&exe, &["Default"]), "Default");
     assert_resolves_to(&exe, DEFAULT_ICO, "the icon after switching back");
 
-    assert_eq!(
-        len(&exe),
-        baseline,
-        "switching away and back must not accrete dead RT_ICON resources"
+    // The PE editor can relocate resources once. Bound that cost for these fixtures,
+    // then verify that repeated swaps do not add more sections or dead icon data.
+    let settled_size = len(&exe);
+    let growth_limit = baseline + (DEFAULT_ICO.len() + DARK_ICO.len()) as u64 + 4096;
+    assert!(
+        settled_size <= growth_limit,
+        "resource relocation exceeded the fixture growth limit"
     );
+    for _ in 0..3 {
+        assert_eq!(run(&exe, &["cycle", "Dark", "Default"]), "Default");
+        assert_eq!(
+            len(&exe),
+            settled_size,
+            "repeated swaps must not accumulate resource sections"
+        );
+        assert_resolves_to(&exe, DEFAULT_ICO, "the icon after another complete cycle");
+    }
 
     let _ = std::fs::remove_dir_all(&dir);
 }
