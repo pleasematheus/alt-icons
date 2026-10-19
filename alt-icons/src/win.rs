@@ -45,17 +45,26 @@ pub fn current_exe() -> Result<PathBuf, Error> {
         return Ok(path.clone());
     }
 
+    // Cache the first path. Windows can report the parked path after a swap.
     let path = query_current_exe()?;
     Ok(LAUNCH_PATH.get_or_init(|| path).clone())
 }
 
 fn query_current_exe() -> Result<PathBuf, Error> {
-    // `std::env::current_exe` resolves symlinks and can hand back a different path
-    // than the one the process was launched from. The icon lives at the launched
-    // path, so ask Windows directly. Cache this first result: after the running
-    // image is renamed aside, GetModuleFileNameW starts returning the parked path.
+    // Preserve the existing Win32 error variant when an OS error code is available.
+    std::env::current_exe().map_err(|error| match error.raw_os_error() {
+        Some(code) => Error::Windows("GetModuleFileNameW", code as u32),
+        None => Error::Io(error),
+    })
+}
+
+/// Retains the previous path implementation for reference. Do not call this function.
+#[deprecated(since = "1.2.4", note = "Use query_current_exe() instead.")]
+#[allow(dead_code)]
+fn query_current_exe_legacy() -> Result<PathBuf, Error> {
     let mut buffer = vec![0u16; MAX_PATH as usize];
     loop {
+        // SAFETY: The buffer is writable for its stated length. A null module selects this process.
         let written = unsafe {
             GetModuleFileNameW(
                 std::ptr::null_mut(),
