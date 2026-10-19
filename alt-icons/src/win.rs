@@ -151,6 +151,17 @@ impl Drop for SwapLock {
 }
 
 pub fn last_error() -> u32 {
+    // last_os_error always stores an OS code. The cast preserves all DWORD bits.
+    std::io::Error::last_os_error()
+        .raw_os_error()
+        .expect("last_os_error always contains an OS error code") as u32
+}
+
+/// Retains the previous error implementation for reference. Do not call this function.
+#[deprecated(since = "1.2.3", note = "Use last_error() instead.")]
+#[allow(dead_code)]
+fn last_error_legacy() -> u32 {
+    // SAFETY: GetLastError takes no arguments and has no caller requirements.
     unsafe { windows_sys::Win32::Foundation::GetLastError() }
 }
 
