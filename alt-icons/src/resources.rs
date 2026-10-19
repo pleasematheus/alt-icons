@@ -49,8 +49,13 @@ fn int_resource(id: u16) -> *const u16 {
 /// Deliberately reads the *file*, never the loaded module: after a swap the running
 /// image is still mapped from the pre-swap bytes, so asking the loaded module would
 /// return stale data.
-pub fn read(path: &Path, kind: *const u16, name: *const u16) -> Result<Option<Vec<u8>>, Error> {
+fn read(path: &Path, kind: u16, name: ResourceName) -> Result<Option<Vec<u8>>, Error> {
     let path_w = Wide::new(path);
+    let name_ptr = match &name {
+        ResourceName::Id(id) => int_resource(*id),
+        ResourceName::Text(text) => text.as_ptr(),
+    };
+    // SAFETY: The path buffer is terminated and remains alive for this call.
     let module: HMODULE = unsafe {
         LoadLibraryExW(
             path_w.as_ptr(),
@@ -62,6 +67,65 @@ pub fn read(path: &Path, kind: *const u16, name: *const u16) -> Result<Option<Ve
         return Err(Error::Windows("LoadLibraryExW", last_error()));
     }
 
+    // SAFETY: The module is live. Resource identifiers are integers or owned UTF-16 strings.
+    // Copy the returned bytes before FreeLibrary invalidates the resource memory.
+    let found = unsafe {
+        let info = FindResourceW(module, name_ptr, int_resource(kind));
+        if info.is_null() {
+            None
+        } else {
+            let size = SizeofResource(module, info) as usize;
+            let handle = LoadResource(module, info);
+            let data = if handle.is_null() {
+                std::ptr::null()
+            } else {
+                LockResource(handle) as *const u8
+            };
+            if handle.is_null() || data.is_null() || size == 0 || size > isize::MAX as usize {
+                None
+            } else {
+                Some(std::slice::from_raw_parts(data, size).to_vec())
+            }
+        }
+    };
+
+    // SAFETY: This is the module loaded above; no borrowed resource bytes remain.
+    unsafe { FreeLibrary(module) };
+    Ok(found)
+}
+
+enum ResourceName {
+    Id(u16),
+    Text(Wide),
+}
+
+pub fn read_group(path: &Path) -> Result<Option<Vec<u8>>, Error> {
+    read(path, RT_GROUP_ICON, ResourceName::Id(GROUP_ID))
+}
+
+pub fn read_state(path: &Path) -> Result<Option<String>, Error> {
+    let bytes = read(path, RT_RCDATA, ResourceName::Text(Wide::new(STATE_NAME)))?;
+    Ok(bytes.and_then(|bytes| String::from_utf8(bytes).ok()))
+}
+
+/// Retains the previous resource reader for reference. Do not call this function.
+#[deprecated(
+    since = "1.2.9",
+    note = "Use read() with typed resource identifiers instead."
+)]
+#[allow(dead_code)]
+fn read_legacy(path: &Path, kind: *const u16, name: *const u16) -> Result<Option<Vec<u8>>, Error> {
+    let path_w = Wide::new(path);
+    let module: HMODULE = unsafe {
+        LoadLibraryExW(
+            path_w.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_LIBRARY_AS_DATAFILE,
+        )
+    };
+    if module.is_null() {
+        return Err(Error::Windows("LoadLibraryExW", last_error()));
+    }
     let found = unsafe {
         let info = FindResourceW(module, name, kind);
         if info.is_null() {
@@ -77,19 +141,8 @@ pub fn read(path: &Path, kind: *const u16, name: *const u16) -> Result<Option<Ve
             }
         }
     };
-
     unsafe { FreeLibrary(module) };
     Ok(found)
-}
-
-pub fn read_group(path: &Path) -> Result<Option<Vec<u8>>, Error> {
-    read(path, int_resource(RT_GROUP_ICON), int_resource(GROUP_ID))
-}
-
-pub fn read_state(path: &Path) -> Result<Option<String>, Error> {
-    let name = Wide::new(STATE_NAME);
-    let bytes = read(path, int_resource(RT_RCDATA), name.as_ptr())?;
-    Ok(bytes.and_then(|bytes| String::from_utf8(bytes).ok()))
 }
 
 /// An open resource-update transaction. Dropping without [`Update::commit`] discards

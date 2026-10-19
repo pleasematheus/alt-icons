@@ -99,6 +99,7 @@ pub fn rename_new(from: &Path, to: &Path) -> Result<(), Error> {
 fn rename(from: &Path, to: &Path, flags: u32) -> Result<(), Error> {
     let from_w = Wide::new(from);
     let to_w = Wide::new(to);
+    // SAFETY: Both paths are terminated UTF-16 buffers that remain alive for the call.
     let ok = unsafe { MoveFileExW(from_w.as_ptr(), to_w.as_ptr(), flags) };
     if ok == 0 {
         return Err(Error::Windows("MoveFileExW", last_error()));
@@ -112,6 +113,7 @@ fn rename(from: &Path, to: &Path, flags: u32) -> Result<(), Error> {
 /// This is a courtesy, not the mechanism: the icon of the file on disk changes
 /// whether or not this is called. See `DESIGN.md` for what was measured.
 pub fn notify_shell() {
+    // SAFETY: SHCNE_ASSOCCHANGED requires no item data, so both item pointers are null.
     unsafe {
         SHChangeNotify(
             SHCNE_ASSOCCHANGED as i32,
@@ -138,11 +140,13 @@ impl SwapLock {
         // this, a stale code left by any earlier call on this thread would surface
         // as a spurious `SwapInProgress`.
         winsafe::SetLastError(winsafe::co::ERROR::SUCCESS);
+        // SAFETY: The name is terminated and live; null attributes select the system defaults.
         let handle = unsafe { CreateMutexW(std::ptr::null(), 1, name_w.as_ptr()) };
         if handle.is_null() {
             return Err(Error::Windows("CreateMutexW", last_error()));
         }
         if last_error() == ERROR_ALREADY_EXISTS {
+            // SAFETY: This call owns a valid handle, but does not own the existing mutex.
             unsafe { CloseHandle(handle) };
             return Err(Error::SwapInProgress);
         }
@@ -152,6 +156,7 @@ impl SwapLock {
 
 impl Drop for SwapLock {
     fn drop(&mut self) {
+        // SAFETY: SwapLock cannot cross threads. This thread owns the mutex and its live handle.
         unsafe {
             ReleaseMutex(self.0);
             CloseHandle(self.0);
@@ -189,6 +194,7 @@ fn last_error_legacy() -> u32 {
 /// as PowerShell literal strings, never interpolated as executable commands.
 pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Result<(), Error> {
     let mut system_dir = vec![0u16; MAX_PATH as usize];
+    // SAFETY: The buffer is writable for the supplied length; the result is checked before use.
     let written = unsafe { GetSystemDirectoryW(system_dir.as_mut_ptr(), system_dir.len() as u32) };
     if written == 0 || written as usize >= system_dir.len() {
         return Err(Error::Windows("GetSystemDirectoryW", last_error()));
