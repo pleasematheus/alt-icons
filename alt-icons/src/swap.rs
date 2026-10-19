@@ -244,8 +244,16 @@ fn location(exe: &Path) -> Result<(&Path, String), Error> {
 fn unique_path(dir: &Path, stem: &str, extension: &str) -> PathBuf {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let serial = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let pid = unsafe { GetCurrentProcessId() };
+    let pid = std::process::id();
     dir.join(format!("{stem}.{pid}-{serial}.{extension}"))
+}
+
+/// Retains the previous PID implementation for reference. Do not call this function.
+#[deprecated(since = "1.2.1", note = "Use std::process::id() instead.")]
+#[allow(dead_code)]
+fn current_process_id_legacy() -> u32 {
+    // SAFETY: GetCurrentProcessId takes no arguments and has no caller requirements.
+    unsafe { GetCurrentProcessId() }
 }
 
 /// Matches the leftovers [`unique_path`] produces, without matching the executable
