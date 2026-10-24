@@ -198,26 +198,7 @@ pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Resu
         .join("WindowsPowerShell/v1.0/powershell.exe");
 
     let (owner, started) = if wait_for_current {
-        let mut creation = FILETIME::default();
-        let mut exit = FILETIME::default();
-        let mut kernel = FILETIME::default();
-        let mut user = FILETIME::default();
-        if unsafe {
-            GetProcessTimes(
-                GetCurrentProcess(),
-                &mut creation,
-                &mut exit,
-                &mut kernel,
-                &mut user,
-            )
-        } == 0
-        {
-            return Err(Error::Windows("GetProcessTimes", last_error()));
-        }
-        (
-            std::process::id(),
-            (u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime),
-        )
+        (std::process::id(), process_creation_time()?)
     } else {
         (0, 0)
     };
@@ -270,6 +251,37 @@ pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Resu
         CloseHandle(process.hProcess);
     }
     Ok(())
+}
+
+fn process_creation_time() -> Result<u64, Error> {
+    let (creation, _, _, _) = winsafe::HPROCESS::GetCurrentProcess()
+        .GetProcessTimes()
+        .map_err(|code| Error::Windows("GetProcessTimes", code.raw()))?;
+    Ok(creation.into())
+}
+
+/// Retains the previous time query for reference. Do not call this function.
+#[deprecated(since = "1.2.6", note = "Use process_creation_time() instead.")]
+#[allow(dead_code)]
+fn process_creation_time_legacy() -> Result<u64, Error> {
+    let mut creation = FILETIME::default();
+    let mut exit = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    // SAFETY: The current-process handle is valid and all output pointers are writable.
+    if unsafe {
+        GetProcessTimes(
+            GetCurrentProcess(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    } == 0
+    {
+        return Err(Error::Windows("GetProcessTimes", last_error()));
+    }
+    Ok((u64::from(creation.dwHighDateTime) << 32) | u64::from(creation.dwLowDateTime))
 }
 
 /// Retains the previous PID implementation for reference. Do not call this function.
