@@ -137,7 +137,7 @@ impl SwapLock {
         // there, but is not documented to clear the slot when it was not. Without
         // this, a stale code left by any earlier call on this thread would surface
         // as a spurious `SwapInProgress`.
-        unsafe { SetLastError(0) };
+        winsafe::SetLastError(winsafe::co::ERROR::SUCCESS);
         let handle = unsafe { CreateMutexW(std::ptr::null(), 1, name_w.as_ptr()) };
         if handle.is_null() {
             return Err(Error::Windows("CreateMutexW", last_error()));
@@ -157,6 +157,17 @@ impl Drop for SwapLock {
             CloseHandle(self.0);
         }
     }
+}
+
+/// Retains the previous error reset for reference. Do not call this function.
+#[deprecated(
+    since = "1.2.5",
+    note = "Use winsafe::SetLastError(winsafe::co::ERROR::SUCCESS) instead."
+)]
+#[allow(dead_code)]
+fn clear_last_error_legacy() {
+    // SAFETY: SetLastError accepts any error code and has no caller requirements.
+    unsafe { SetLastError(0) };
 }
 
 pub fn last_error() -> u32 {
