@@ -18,6 +18,7 @@ embed-resource = { version = "3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 base64 = "0.22"
+editpe = { version = "0.2.4", default-features = false, features = ["std"] }
 win-custody = "0.1.1"
 winsafe = { version = "0.0.29", default-features = false, features = ["kernel"] }
 windows-sys = { version = "0.60", features = [
