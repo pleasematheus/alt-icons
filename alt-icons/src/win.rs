@@ -216,7 +216,34 @@ pub fn schedule_cleanup(path: &Path, exe: &Path, wait_for_current: bool) -> Resu
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>(),
     );
-    let application = Wide::new(&powershell);
+    launch_cleanup(&powershell, &encoded)
+}
+
+fn launch_cleanup(powershell: &Path, encoded: &str) -> Result<(), Error> {
+    // No streams or incidental handles are inherited. Dropping Process only closes its handle.
+    let process = win_custody::Launch::new(powershell)
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-EncodedCommand",
+            encoded,
+        ])
+        .create_no_window(true)
+        .spawn()
+        .map_err(|error| match error.raw_os_error() {
+            Some(code) => Error::Windows("CreateProcessW", code as u32),
+            None => Error::Io(error),
+        })?;
+    drop(process);
+    Ok(())
+}
+
+/// Retains the previous process launch for reference. Do not call this function.
+#[deprecated(since = "1.2.7", note = "Use launch_cleanup() instead.")]
+#[allow(dead_code)]
+fn launch_cleanup_legacy(powershell: &Path, encoded: &str) -> Result<(), Error> {
+    let application = Wide::new(powershell);
     let mut command = Wide::new(format!(
         "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand {encoded}"
     ));
